@@ -118,6 +118,40 @@ var _ = Describe("bridge Operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	FContext("when the IPAM plugin fails", func() {
+		It("wraps and returns the error", func() {
+			const IFNAME = "eth0"
+
+			conf := fmt.Sprintf(`{
+    "name": "mynet",
+    "type": "bridge",
+    "ipam": {
+        "type": "not-valid-plugin"
+    }
+}`)
+
+			targetNs, err := ns.NewNS()
+			Expect(err).NotTo(HaveOccurred())
+			defer targetNs.Close()
+
+			args := &skel.CmdArgs{
+				ContainerID: "dummy",
+				Netns:       targetNs.Path(),
+				IfName:      IFNAME,
+				StdinData:   []byte(conf),
+			}
+
+			err = originalNS.Do(func(ns.NetNS) error {
+				defer GinkgoRecover()
+				_, err := testutils.CmdAddWithResult(targetNs.Path(), IFNAME, func() error {
+					return cmdAdd(args)
+				})
+				return err
+			})
+			Expect(err).To(MatchError("exec ipam: not found something"))
+		})
+	})
+
 	It("configures and deconfigures a bridge and veth with default route with ADD/DEL", func() {
 		const BRNAME = "cni0"
 		const IFNAME = "eth0"
